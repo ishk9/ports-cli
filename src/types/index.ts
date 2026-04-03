@@ -5,10 +5,11 @@ export interface PortEntry {
   project: string | null;
   framework: FrameworkInfo | null;
   uptime: string;
+  cpu: string;
+  memory: string;
   status: 'healthy' | 'unhealthy';
   directory: string | null;
   gitBranch: string | null;
-  memory: string | null;
   startedAt: string | null;
   isDevServer: boolean;
 }

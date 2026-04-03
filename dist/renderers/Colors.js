@@ -26,6 +26,14 @@ exports.Colors = {
     sectionLabel: chalk_1.default.dim,
     treeGlyph: chalk_1.default.gray,
     memory: chalk_1.default.green,
+    cpu: (pct) => {
+        const n = parseFloat(pct);
+        if (n >= 50)
+            return chalk_1.default.red(pct);
+        if (n >= 10)
+            return chalk_1.default.yellow(pct);
+        return chalk_1.default.green(pct);
+    },
     directory: chalk_1.default.magenta,
     watching: chalk_1.default.dim,
     newPort: chalk_1.default.green.bold,

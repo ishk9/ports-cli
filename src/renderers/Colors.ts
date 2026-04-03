@@ -22,6 +22,12 @@ export const Colors = {
   sectionLabel: chalk.dim,
   treeGlyph: chalk.gray,
   memory: chalk.green,
+  cpu: (pct: string): string => {
+    const n = parseFloat(pct);
+    if (n >= 50) return chalk.red(pct);
+    if (n >= 10) return chalk.yellow(pct);
+    return chalk.green(pct);
+  },
   directory: chalk.magenta,
   watching: chalk.dim,
   newPort: chalk.green.bold,

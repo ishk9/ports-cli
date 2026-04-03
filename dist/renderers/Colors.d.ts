@@ -21,6 +21,7 @@ export declare const Colors: {
     readonly sectionLabel: chalk.Chalk;
     readonly treeGlyph: chalk.Chalk;
     readonly memory: chalk.Chalk;
+    readonly cpu: (pct: string) => string;
     readonly directory: chalk.Chalk;
     readonly watching: chalk.Chalk;
     readonly newPort: chalk.Chalk;

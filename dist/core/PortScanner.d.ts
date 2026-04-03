@@ -7,6 +7,14 @@ export declare class PortScanner implements IPortScanner {
     private readonly frameworkRegistry;
     scan(devOnly: boolean): Promise<PortEntry[]>;
     /**
+     * Resolves CPU%, RSS memory, uptime, and start time for all PIDs in one ps call.
+     * Format: pid=%cpu=,rss=,etime=,lstart=
+     */
+    private resolveProcessStats;
+    private formatCpu;
+    private formatMemory;
+    private parseEtime;
+    /**
      * Resolves the full binary basename for each PID via a single ps call.
      */
     private resolveFullCommandNames;

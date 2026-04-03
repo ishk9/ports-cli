@@ -15,6 +15,8 @@ const COLS = {
   pid:       { header: 'PID',       min: 8  },
   project:   { header: 'PROJECT',   min: 20 },
   framework: { header: 'FRAMEWORK', min: 12 },
+  cpu:       { header: 'CPU',       min: 8  },
+  memory:    { header: 'MEM',       min: 10 },
   uptime:    { header: 'UPTIME',    min: 10 },
   status:    { header: 'STATUS',    min: 10 },
 } as const;
@@ -55,6 +57,8 @@ export class TableRenderer implements IRenderer<PortEntry[]> {
       pid:       COLS.pid.min,
       project:   COLS.project.min,
       framework: COLS.framework.min,
+      cpu:       COLS.cpu.min,
+      memory:    COLS.memory.min,
       uptime:    COLS.uptime.min,
       status:    COLS.status.min,
     };
@@ -65,6 +69,8 @@ export class TableRenderer implements IRenderer<PortEntry[]> {
       widths.pid       = Math.max(widths.pid,       String(e.pid).length + 2);
       widths.project   = Math.max(widths.project,   (e.project ?? '–').length + 2);
       widths.framework = Math.max(widths.framework, (e.framework?.name ?? '–').length + 2);
+      widths.cpu       = Math.max(widths.cpu,       e.cpu.length + 2);
+      widths.memory    = Math.max(widths.memory,    e.memory.length + 2);
       widths.uptime    = Math.max(widths.uptime,    e.uptime.length + 2);
     }
 
@@ -72,7 +78,7 @@ export class TableRenderer implements IRenderer<PortEntry[]> {
   }
 
   private renderHeader(widths: Record<ColKey, number>): string {
-    const cols: ColKey[] = ['port', 'process', 'pid', 'project', 'framework', 'uptime', 'status'];
+    const cols: ColKey[] = ['port', 'process', 'pid', 'project', 'framework', 'cpu', 'memory', 'uptime', 'status'];
     const parts = cols.map((k) => Colors.header(COLS[k].header.padEnd(widths[k])));
     return '  ' + parts.join('');
   }
@@ -87,6 +93,8 @@ export class TableRenderer implements IRenderer<PortEntry[]> {
     const pidStr       = String(entry.pid);
     const projectStr   = entry.project ?? '–';
     const frameworkStr = entry.framework?.name ?? '–';
+    const cpuStr       = entry.cpu;
+    const memStr       = entry.memory;
     const uptimeStr    = entry.uptime;
     const statusStr    = `● ${entry.status}`;
 
@@ -101,6 +109,8 @@ export class TableRenderer implements IRenderer<PortEntry[]> {
       entry.framework
         ? Colors.framework(entry.framework.color)(frameworkStr.padEnd(widths.framework))
         : Colors.dim(frameworkStr.padEnd(widths.framework)),
+      Colors.cpu(cpuStr.padEnd(widths.cpu)),
+      Colors.memory(memStr.padEnd(widths.memory)),
       Colors.uptime(uptimeStr.padEnd(widths.uptime)),
       entry.status === 'healthy'
         ? Colors.statusHealthy(statusStr)

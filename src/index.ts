@@ -6,12 +6,15 @@ import { DetailCommand } from './commands/DetailCommand';
 import { CleanCommand } from './commands/CleanCommand';
 import { WatchCommand } from './commands/WatchCommand';
 
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { version } = require('../package.json') as { version: string };
+
 const program = new Command();
 
 program
   .name('ports')
   .description('ports — instantly surface active ports on your machine')
-  .version('1.0.0')
+  .version(version)
   .option('--all', 'show all ports, not just dev servers')
   .argument('[port]', 'show details for a specific port number')
   .action(async (portArg: string | undefined, options: { all?: boolean }) => {

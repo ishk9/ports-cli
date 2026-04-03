@@ -23,6 +23,13 @@ const DEV_PROCESSES = new Set([
 
 const DOCKER_PROCESS_PATTERNS = ['docker', 'com.docker'];
 
+interface ProcessStats {
+  cpu: string;
+  memory: string;
+  uptime: string;
+  startedAt: string | null;
+}
+
 export class PortScanner implements IPortScanner {
   private readonly projectDetector = new ProjectDetector();
   private readonly processInspector = new ProcessInspector();
@@ -35,22 +42,93 @@ export class PortScanner implements IPortScanner {
 
     const uniquePids = [...new Set(rawRecords.map((r) => r.pid))];
 
-    // Resolve full command names once (lsof truncates to 9 chars)
+    // Three batched calls — avoid N individual ps/lsof invocations
     const fullCommandMap = this.resolveFullCommandNames(uniquePids);
+    const statsMap       = this.resolveProcessStats(uniquePids);
+    const cwdMap         = this.projectDetector.getCwdBatch(uniquePids);
 
-    // Apply full command names to records
     const enrichedRecords = rawRecords.map((r) => ({
       ...r,
       command: fullCommandMap.get(r.pid) ?? r.command,
     }));
 
-    const cwdMap = this.projectDetector.getCwdBatch(uniquePids);
-
     const entries: PortEntry[] = enrichedRecords
       .filter((r) => !devOnly || this.isDevProcess(r.command))
-      .map((r) => this.buildEntry(r, cwdMap));
+      .map((r) => this.buildEntry(r, cwdMap, statsMap));
 
     return entries.sort((a, b) => a.port - b.port);
+  }
+
+  /**
+   * Resolves CPU%, RSS memory, uptime, and start time for all PIDs in one ps call.
+   * Format: pid=%cpu=,rss=,etime=,lstart=
+   */
+  private resolveProcessStats(pids: number[]): Map<number, ProcessStats> {
+    const map = new Map<number, ProcessStats>();
+    if (pids.length === 0) return map;
+
+    try {
+      const pidList = pids.join(',');
+      // lstart is a long date string — must be last so etime stays parseable
+      const raw = execSync(
+        `ps -p ${pidList} -o pid=,%cpu=,rss=,etime=,lstart= 2>/dev/null`,
+        { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] },
+      );
+
+      for (const line of raw.split('\n')) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        const parts = trimmed.split(/\s+/);
+        if (parts.length < 4) continue;
+
+        const pid    = parseInt(parts[0], 10);
+        const cpuRaw = parseFloat(parts[1]);
+        const rssKb  = parseInt(parts[2], 10);
+        const etime  = parts[3];
+        // lstart is everything after the first 4 tokens
+        const lstart = parts.slice(4).join(' ') || null;
+
+        map.set(pid, {
+          cpu:       this.formatCpu(cpuRaw),
+          memory:    this.formatMemory(rssKb),
+          uptime:    this.parseEtime(etime),
+          startedAt: lstart,
+        });
+      }
+    } catch {
+      // ps unavailable — entries will show '–'
+    }
+
+    return map;
+  }
+
+  private formatCpu(pct: number): string {
+    return `${pct.toFixed(1)}%`;
+  }
+
+  private formatMemory(rssKb: number): string {
+    if (rssKb >= 1024 * 1024) return `${(rssKb / 1024 / 1024).toFixed(1)} GB`;
+    if (rssKb >= 1024)        return `${(rssKb / 1024).toFixed(1)} MB`;
+    return `${rssKb} KB`;
+  }
+
+  private parseEtime(etime: string): string {
+    const dayMatch = etime.match(/^(\d+)-(\d+):(\d+):(\d+)$/);
+    if (dayMatch) {
+      const [, d, h, m] = dayMatch;
+      return `${d}d ${h}h ${m}m`;
+    }
+    const parts = etime.split(':').map(Number);
+    if (parts.length === 3) {
+      const [h, m, s] = parts;
+      if (h > 0) return `${h}h ${m}m`;
+      return `${m}m ${s}s`;
+    }
+    if (parts.length === 2) {
+      const [m, s] = parts;
+      return `${m}m ${s}s`;
+    }
+    return etime;
   }
 
   /**
@@ -126,18 +204,20 @@ export class PortScanner implements IPortScanner {
   private buildEntry(
     record: RawPortRecord,
     cwdMap: Map<number, string>,
+    statsMap: Map<number, ProcessStats>,
   ): PortEntry {
     const isDocker = this.isDockerProcess(record.command);
 
-    // For Docker processes, skip cwd-based project detection;
-    // use the container name as project instead.
     const containerName = isDocker
       ? this.dockerResolver.getContainerName(record.port)
       : null;
 
     const cwd = isDocker ? null : (cwdMap.get(record.pid) ?? null);
     const projectInfo = this.projectDetector.resolve(cwd);
-    const stats = this.processInspector.getStats(record.pid);
+
+    const stats = statsMap.get(record.pid) ?? {
+      cpu: '–', memory: '–', uptime: '–', startedAt: null,
+    };
 
     const framework = this.frameworkRegistry.resolve(
       record.command,
@@ -146,8 +226,6 @@ export class PortScanner implements IPortScanner {
     );
 
     const project = containerName ?? projectInfo.project;
-
-    // Display-friendly process name: for Docker, show "docker"
     const displayCommand = isDocker ? 'docker' : record.command;
 
     return {
@@ -156,11 +234,12 @@ export class PortScanner implements IPortScanner {
       pid: record.pid,
       project,
       framework,
+      cpu: stats.cpu,
+      memory: stats.memory,
       uptime: stats.uptime,
       status: 'healthy',
       directory: projectInfo.directory,
       gitBranch: projectInfo.gitBranch,
-      memory: stats.memory,
       startedAt: stats.startedAt,
       isDevServer: this.isDevProcess(record.command),
     };
@@ -173,7 +252,9 @@ export class PortScanner implements IPortScanner {
 
   private isDevProcess(command: string): boolean {
     const lower = command.toLowerCase();
-    if (DEV_PROCESSES.has(lower)) return true;
+    // Strip version suffixes like "next-server (v16.1.6)" → "next-server"
+    const baseName = lower.split(/[\s(]/)[0];
+    if (DEV_PROCESSES.has(lower) || DEV_PROCESSES.has(baseName)) return true;
     if (this.isDockerProcess(lower)) return true;
     return false;
   }

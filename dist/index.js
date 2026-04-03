@@ -6,11 +6,13 @@ const ListCommand_1 = require("./commands/ListCommand");
 const DetailCommand_1 = require("./commands/DetailCommand");
 const CleanCommand_1 = require("./commands/CleanCommand");
 const WatchCommand_1 = require("./commands/WatchCommand");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { version } = require('../package.json');
 const program = new commander_1.Command();
 program
     .name('ports')
     .description('ports — instantly surface active ports on your machine')
-    .version('1.0.0')
+    .version(version)
     .option('--all', 'show all ports, not just dev servers')
     .argument('[port]', 'show details for a specific port number')
     .action(async (portArg, options) => {

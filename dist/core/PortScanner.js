@@ -66,18 +66,85 @@ class PortScanner {
         if (rawRecords.length === 0)
             return [];
         const uniquePids = [...new Set(rawRecords.map((r) => r.pid))];
-        // Resolve full command names once (lsof truncates to 9 chars)
+        // Three batched calls — avoid N individual ps/lsof invocations
         const fullCommandMap = this.resolveFullCommandNames(uniquePids);
-        // Apply full command names to records
+        const statsMap = this.resolveProcessStats(uniquePids);
+        const cwdMap = this.projectDetector.getCwdBatch(uniquePids);
         const enrichedRecords = rawRecords.map((r) => ({
             ...r,
             command: fullCommandMap.get(r.pid) ?? r.command,
         }));
-        const cwdMap = this.projectDetector.getCwdBatch(uniquePids);
         const entries = enrichedRecords
             .filter((r) => !devOnly || this.isDevProcess(r.command))
-            .map((r) => this.buildEntry(r, cwdMap));
+            .map((r) => this.buildEntry(r, cwdMap, statsMap));
         return entries.sort((a, b) => a.port - b.port);
+    }
+    /**
+     * Resolves CPU%, RSS memory, uptime, and start time for all PIDs in one ps call.
+     * Format: pid=%cpu=,rss=,etime=,lstart=
+     */
+    resolveProcessStats(pids) {
+        const map = new Map();
+        if (pids.length === 0)
+            return map;
+        try {
+            const pidList = pids.join(',');
+            // lstart is a long date string — must be last so etime stays parseable
+            const raw = (0, child_process_1.execSync)(`ps -p ${pidList} -o pid=,%cpu=,rss=,etime=,lstart= 2>/dev/null`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+            for (const line of raw.split('\n')) {
+                const trimmed = line.trim();
+                if (!trimmed)
+                    continue;
+                const parts = trimmed.split(/\s+/);
+                if (parts.length < 4)
+                    continue;
+                const pid = parseInt(parts[0], 10);
+                const cpuRaw = parseFloat(parts[1]);
+                const rssKb = parseInt(parts[2], 10);
+                const etime = parts[3];
+                // lstart is everything after the first 4 tokens
+                const lstart = parts.slice(4).join(' ') || null;
+                map.set(pid, {
+                    cpu: this.formatCpu(cpuRaw),
+                    memory: this.formatMemory(rssKb),
+                    uptime: this.parseEtime(etime),
+                    startedAt: lstart,
+                });
+            }
+        }
+        catch {
+            // ps unavailable — entries will show '–'
+        }
+        return map;
+    }
+    formatCpu(pct) {
+        return `${pct.toFixed(1)}%`;
+    }
+    formatMemory(rssKb) {
+        if (rssKb >= 1024 * 1024)
+            return `${(rssKb / 1024 / 1024).toFixed(1)} GB`;
+        if (rssKb >= 1024)
+            return `${(rssKb / 1024).toFixed(1)} MB`;
+        return `${rssKb} KB`;
+    }
+    parseEtime(etime) {
+        const dayMatch = etime.match(/^(\d+)-(\d+):(\d+):(\d+)$/);
+        if (dayMatch) {
+            const [, d, h, m] = dayMatch;
+            return `${d}d ${h}h ${m}m`;
+        }
+        const parts = etime.split(':').map(Number);
+        if (parts.length === 3) {
+            const [h, m, s] = parts;
+            if (h > 0)
+                return `${h}h ${m}m`;
+            return `${m}m ${s}s`;
+        }
+        if (parts.length === 2) {
+            const [m, s] = parts;
+            return `${m}m ${s}s`;
+        }
+        return etime;
     }
     /**
      * Resolves the full binary basename for each PID via a single ps call.
@@ -146,19 +213,18 @@ class PortScanner {
             port: parseInt(match[3], 10),
         };
     }
-    buildEntry(record, cwdMap) {
+    buildEntry(record, cwdMap, statsMap) {
         const isDocker = this.isDockerProcess(record.command);
-        // For Docker processes, skip cwd-based project detection;
-        // use the container name as project instead.
         const containerName = isDocker
             ? this.dockerResolver.getContainerName(record.port)
             : null;
         const cwd = isDocker ? null : (cwdMap.get(record.pid) ?? null);
         const projectInfo = this.projectDetector.resolve(cwd);
-        const stats = this.processInspector.getStats(record.pid);
+        const stats = statsMap.get(record.pid) ?? {
+            cpu: '–', memory: '–', uptime: '–', startedAt: null,
+        };
         const framework = this.frameworkRegistry.resolve(record.command, projectInfo.directory, containerName);
         const project = containerName ?? projectInfo.project;
-        // Display-friendly process name: for Docker, show "docker"
         const displayCommand = isDocker ? 'docker' : record.command;
         return {
             port: record.port,
@@ -166,11 +232,12 @@ class PortScanner {
             pid: record.pid,
             project,
             framework,
+            cpu: stats.cpu,
+            memory: stats.memory,
             uptime: stats.uptime,
             status: 'healthy',
             directory: projectInfo.directory,
             gitBranch: projectInfo.gitBranch,
-            memory: stats.memory,
             startedAt: stats.startedAt,
             isDevServer: this.isDevProcess(record.command),
         };
@@ -181,7 +248,9 @@ class PortScanner {
     }
     isDevProcess(command) {
         const lower = command.toLowerCase();
-        if (DEV_PROCESSES.has(lower))
+        // Strip version suffixes like "next-server (v16.1.6)" → "next-server"
+        const baseName = lower.split(/[\s(]/)[0];
+        if (DEV_PROCESSES.has(lower) || DEV_PROCESSES.has(baseName))
             return true;
         if (this.isDockerProcess(lower))
             return true;

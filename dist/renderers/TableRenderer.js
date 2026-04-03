@@ -8,6 +8,8 @@ const COLS = {
     pid: { header: 'PID', min: 8 },
     project: { header: 'PROJECT', min: 20 },
     framework: { header: 'FRAMEWORK', min: 12 },
+    cpu: { header: 'CPU', min: 8 },
+    memory: { header: 'MEM', min: 10 },
     uptime: { header: 'UPTIME', min: 10 },
     status: { header: 'STATUS', min: 10 },
 };
@@ -39,6 +41,8 @@ class TableRenderer {
             pid: COLS.pid.min,
             project: COLS.project.min,
             framework: COLS.framework.min,
+            cpu: COLS.cpu.min,
+            memory: COLS.memory.min,
             uptime: COLS.uptime.min,
             status: COLS.status.min,
         };
@@ -48,12 +52,14 @@ class TableRenderer {
             widths.pid = Math.max(widths.pid, String(e.pid).length + 2);
             widths.project = Math.max(widths.project, (e.project ?? '–').length + 2);
             widths.framework = Math.max(widths.framework, (e.framework?.name ?? '–').length + 2);
+            widths.cpu = Math.max(widths.cpu, e.cpu.length + 2);
+            widths.memory = Math.max(widths.memory, e.memory.length + 2);
             widths.uptime = Math.max(widths.uptime, e.uptime.length + 2);
         }
         return widths;
     }
     renderHeader(widths) {
-        const cols = ['port', 'process', 'pid', 'project', 'framework', 'uptime', 'status'];
+        const cols = ['port', 'process', 'pid', 'project', 'framework', 'cpu', 'memory', 'uptime', 'status'];
         const parts = cols.map((k) => Colors_1.Colors.header(COLS[k].header.padEnd(widths[k])));
         return '  ' + parts.join('');
     }
@@ -63,6 +69,8 @@ class TableRenderer {
         const pidStr = String(entry.pid);
         const projectStr = entry.project ?? '–';
         const frameworkStr = entry.framework?.name ?? '–';
+        const cpuStr = entry.cpu;
+        const memStr = entry.memory;
         const uptimeStr = entry.uptime;
         const statusStr = `● ${entry.status}`;
         // Pad raw strings first, then colorize — avoids ANSI code length confusion
@@ -76,6 +84,8 @@ class TableRenderer {
             entry.framework
                 ? Colors_1.Colors.framework(entry.framework.color)(frameworkStr.padEnd(widths.framework))
                 : Colors_1.Colors.dim(frameworkStr.padEnd(widths.framework)),
+            Colors_1.Colors.cpu(cpuStr.padEnd(widths.cpu)),
+            Colors_1.Colors.memory(memStr.padEnd(widths.memory)),
             Colors_1.Colors.uptime(uptimeStr.padEnd(widths.uptime)),
             entry.status === 'healthy'
                 ? Colors_1.Colors.statusHealthy(statusStr)

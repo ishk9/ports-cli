@@ -1,6 +1,6 @@
 {
   "name": "@ishk9/ports",
-  "version": "1.0.0",
+  "version": "1.0.3",
   "description": "CLI that instantly surfaces active ports on your machine",
   "main": "dist/index.js",
   "bin": {
@@ -12,7 +12,12 @@
     "start": "node dist/index.js",
     "lint": "tsc --noEmit"
   },
-  "keywords": ["ports", "cli", "dev-tools", "network"],
+  "keywords": [
+    "ports",
+    "cli",
+    "dev-tools",
+    "network"
+  ],
   "license": "MIT",
   "dependencies": {
     "chalk": "^4.1.2",
