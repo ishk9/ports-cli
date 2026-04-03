@@ -1,0 +1,1 @@
+{"version":3,"file":"DockerResolver.d.ts","sourceRoot":"","sources":["../../src/core/DockerResolver.ts"],"names":[],"mappings":"AAOA;;;GAGG;AACH,qBAAa,cAAc;IACzB,OAAO,CAAC,KAAK,CAAoC;IAEjD;;OAEG;IACH,gBAAgB,CAAC,IAAI,EAAE,MAAM,GAAG,MAAM,GAAG,IAAI;IAK7C,OAAO,CAAC,qBAAqB;IA2B7B,OAAO,CAAC,mBAAmB;CAU5B"}

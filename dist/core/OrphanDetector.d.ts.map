@@ -1,0 +1,1 @@
+{"version":3,"file":"OrphanDetector.d.ts","sourceRoot":"","sources":["../../src/core/OrphanDetector.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,SAAS,EAAE,WAAW,EAAE,MAAM,UAAU,CAAC;AAIlD;;;;;;;;GAQG;AACH,qBAAa,cAAc;IACzB,MAAM,CAAC,OAAO,EAAE,SAAS,EAAE,GAAG,WAAW,EAAE;IAS3C,OAAO,CAAC,UAAU;IAQlB,OAAO,CAAC,WAAW;IASnB;;;OAGG;IACH,OAAO,CAAC,eAAe;CAYxB"}
